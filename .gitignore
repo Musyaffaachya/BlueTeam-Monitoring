@@ -1,0 +1,35 @@
+# Environment & secrets
+.env
+*.env.local
+
+# Dataset (too large for git)
+ml-engine/datasets/cicids/*.csv
+ml-engine/datasets/**/*.zip
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.ipynb_checkpoints/
+venv/
+.venv/
+
+# Docker volumes data (if accidentally bind-mounted locally)
+central/postgres_data/
+central/grafana_data/
+central/redis_data/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Jupyter
+.jupyter/
+
+# Editor
+.vscode/
+.idea/
+*.swp
