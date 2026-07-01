@@ -1,0 +1,120 @@
+{
+  "title": "Blueteam Monitor",
+  "uid": "blueteam-main",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Total Alerts (24h)",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+      "targets": [{
+        "datasource": "PostgreSQL",
+        "rawSql": "SELECT COUNT(*) FROM alerts WHERE created_at > NOW() - INTERVAL '24 hours'",
+        "format": "table"
+      }],
+      "options": { "colorMode": "background", "graphMode": "none" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" },
+        "thresholds": { "steps": [
+          {"color": "green", "value": 0},
+          {"color": "yellow", "value": 5},
+          {"color": "red", "value": 20}
+        ]}
+      }}
+    },
+    {
+      "id": 2,
+      "title": "Critical / High Alerts",
+      "type": "stat",
+      "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+      "targets": [{
+        "datasource": "PostgreSQL",
+        "rawSql": "SELECT COUNT(*) FROM alerts WHERE severity IN ('critical','high') AND created_at > NOW() - INTERVAL '24 hours'",
+        "format": "table"
+      }],
+      "fieldConfig": { "defaults": { "color": { "fixedColor": "red", "mode": "fixed" }}}
+    },
+    {
+      "id": 3,
+      "title": "Active Agents",
+      "type": "stat",
+      "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+      "targets": [{
+        "datasource": "PostgreSQL",
+        "rawSql": "SELECT COUNT(*) FROM agents WHERE last_seen > NOW() - INTERVAL '5 minutes'",
+        "format": "table"
+      }],
+      "fieldConfig": { "defaults": { "color": { "fixedColor": "green", "mode": "fixed" }}}
+    },
+    {
+      "id": 4,
+      "title": "Logs Per Minute",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
+      "targets": [{
+        "datasource": "PostgreSQL",
+        "rawSql": "SELECT COUNT(*) FROM raw_logs WHERE received_at > NOW() - INTERVAL '1 minute'",
+        "format": "table"
+      }]
+    },
+    {
+      "id": 5,
+      "title": "Alert Timeline",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 4, "w": 24, "h": 8 },
+      "targets": [{
+        "datasource": "PostgreSQL",
+        "rawSql": "SELECT DATE_TRUNC('minute', created_at) AS time, COUNT(*) AS alerts FROM alerts WHERE $__timeFilter(created_at) GROUP BY 1 ORDER BY 1",
+        "format": "time_series"
+      }]
+    },
+    {
+      "id": 6,
+      "title": "Recent Alerts",
+      "type": "table",
+      "gridPos": { "x": 0, "y": 12, "w": 24, "h": 10 },
+      "targets": [{
+        "datasource": "PostgreSQL",
+        "rawSql": "SELECT created_at AS \"Time\", agent_host AS \"Host\", log_source AS \"Source\", severity AS \"Severity\", alert_type AS \"Type\", description AS \"Description\" FROM alerts WHERE $__timeFilter(created_at) ORDER BY created_at DESC LIMIT 100",
+        "format": "table"
+      }],
+      "options": { "sortBy": [{ "displayName": "Time", "desc": true }] }
+    },
+    {
+      "id": 7,
+      "title": "Alerts by Severity",
+      "type": "piechart",
+      "gridPos": { "x": 0, "y": 22, "w": 8, "h": 8 },
+      "targets": [{
+        "datasource": "PostgreSQL",
+        "rawSql": "SELECT severity, COUNT(*) FROM alerts WHERE $__timeFilter(created_at) GROUP BY severity",
+        "format": "table"
+      }]
+    },
+    {
+      "id": 8,
+      "title": "Alerts by Source",
+      "type": "piechart",
+      "gridPos": { "x": 8, "y": 22, "w": 8, "h": 8 },
+      "targets": [{
+        "datasource": "PostgreSQL",
+        "rawSql": "SELECT log_source, COUNT(*) FROM alerts WHERE $__timeFilter(created_at) GROUP BY log_source",
+        "format": "table"
+      }]
+    },
+    {
+      "id": 9,
+      "title": "Agent Status",
+      "type": "table",
+      "gridPos": { "x": 16, "y": 22, "w": 8, "h": 8 },
+      "targets": [{
+        "datasource": "PostgreSQL",
+        "rawSql": "SELECT hostname AS \"Host\", ip_address AS \"IP\", os_type AS \"OS\", last_seen AS \"Last Seen\", CASE WHEN last_seen > NOW() - INTERVAL '5 minutes' THEN 'Online' ELSE 'Offline' END AS \"Status\" FROM agents ORDER BY last_seen DESC",
+        "format": "table"
+      }]
+    }
+  ]
+}

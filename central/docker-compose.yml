@@ -1,0 +1,122 @@
+
+networks:
+  blueteam-net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  grafana_data:
+  redis_data:
+
+services:
+
+  # ─── Message Queue ───────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: bt_redis
+    restart: unless-stopped
+    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - blueteam-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Database ────────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: bt_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: blueteam
+      POSTGRES_USER: blueteam
+      POSTGRES_PASSWORD: blueteam_secret
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - blueteam-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U blueteam"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Log Receiver (Fluent Bit) ───────────────────────────────
+  fluent-bit:
+    image: fluent/fluent-bit:3.1
+    container_name: bt_fluentbit
+    restart: unless-stopped
+    ports:
+      - "5140:5140/udp"   # Syslog UDP
+      - "5140:5140/tcp"   # Syslog TCP
+      - "5170:5170/tcp"   # Forward protocol (dari agent)
+      - "2020:2020"       # Fluent Bit HTTP monitoring
+    volumes:
+      - ./fluent-bit/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf
+      - ./fluent-bit/parsers.conf:/fluent-bit/etc/parsers.conf
+    networks:
+      - blueteam-net
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # ─── Dashboard ───────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: bt_grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: blueteam_grafana
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_INSTALL_PLUGINS: grafana-clock-panel,grafana-simple-json-datasource
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+    networks:
+      - blueteam-net
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ─── ML Engine ───────────────────────────────────────────────
+  ml-engine:
+    build:
+      context: ../ml-engine
+      dockerfile: Dockerfile
+    container_name: bt_ml_engine
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: blueteam
+      POSTGRES_USER: blueteam
+      POSTGRES_PASSWORD: blueteam_secret
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+    volumes:
+      - ../ml-engine:/app
+    networks:
+      - blueteam-net
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
